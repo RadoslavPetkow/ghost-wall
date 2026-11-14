@@ -1,0 +1,1752 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-[#05080f] text-slate-200 select-none">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GHOST WALL // Tactical BLE Sonar & Continuity Profiler</title>
+  
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            cyber: {
+              black: '#05080f',
+              panel: '#090e1a',
+              panel2: '#0d1527',
+              border: '#162238',
+              borderGlow: '#00ff9d44',
+              emerald: '#00ff9d',
+              crimson: '#ff2a54',
+              amber: '#ffbe0b',
+              cyan: '#00f0ff',
+              purple: '#d946ef',
+            }
+          },
+          fontFamily: {
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Tactical Scanline & Glow */
+    .scanlines {
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      background-size: 100% 3px, 6px 100%;
+      pointer-events: none;
+    }
+
+    .glow-emerald {
+      box-shadow: 0 0 15px rgba(0, 255, 157, 0.25);
+    }
+    .glow-crimson {
+      box-shadow: 0 0 18px rgba(255, 42, 84, 0.4);
+    }
+    .text-glow-emerald {
+      text-shadow: 0 0 8px rgba(0, 255, 157, 0.6);
+    }
+    .text-glow-crimson {
+      text-shadow: 0 0 10px rgba(255, 42, 84, 0.8);
+    }
+    .text-glow-cyan {
+      text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #090e1a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 2px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #00ff9d66;
+    }
+
+    @keyframes pulseSlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(0.97); }
+    }
+    .pulse-slow {
+      animation: pulseSlow 3s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col overflow-hidden bg-[#05080f] text-slate-100 font-mono">
+  
+  <!-- Scanline CRT Effect Overlay -->
+  <div class="scanlines fixed inset-0 z-50"></div>
+
+  <!-- ======================================================================== -->
+  <!-- TOP HUD BAR -->
+  <!-- ======================================================================== -->
+  <header class="h-16 flex-none border-b border-cyber-border bg-cyber-panel/90 backdrop-blur px-4 flex items-center justify-between z-20">
+    <!-- Branding & Status -->
+    <div class="flex items-center space-x-3">
+      <div class="relative flex items-center justify-center w-9 h-9 rounded bg-cyber-black border border-cyber-emerald/40 glow-emerald">
+        <i data-lucide="radar" class="w-5 h-5 text-cyber-emerald animate-spin" style="animation-duration: 6s;"></i>
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <span class="text-base font-black tracking-widest text-cyber-emerald text-glow-emerald">GHOST WALL</span>
+          <span class="text-xs px-1.5 py-0.5 rounded bg-cyber-emerald/10 text-cyber-emerald border border-cyber-emerald/30">TACTICAL BLE SONAR</span>
+        </div>
+        <div class="text-[10px] text-slate-400 tracking-wider flex items-center space-x-2">
+          <span>HOST: MacBook Air</span>
+          <span class="text-slate-600">•</span>
+          <span id="wsStatus" class="flex items-center space-x-1 text-cyber-amber">
+            <span class="w-1.5 h-1.5 rounded-full bg-cyber-amber animate-ping"></span>
+            <span>CONNECTING</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Counters -->
+    <div class="hidden md:flex items-center space-x-6">
+      <!-- Raw MACs Seen -->
+      <div class="bg-cyber-black/70 border border-cyber-border rounded px-3 py-1 text-center min-w-[100px]">
+        <div class="text-[9px] uppercase tracking-wider text-slate-400">Raw MACs Seen</div>
+        <div id="metricMacs" class="text-lg font-bold text-cyber-cyan text-glow-cyan leading-none mt-0.5">0</div>
+      </div>
+
+      <!-- Unique Physical Entities (FP) -->
+      <div class="bg-cyber-black/70 border border-cyber-border rounded px-3 py-1 text-center min-w-[110px]">
+        <div class="text-[9px] uppercase tracking-wider text-slate-400">Unique Entities (FP)</div>
+        <div id="metricEntities" class="text-lg font-bold text-cyber-emerald text-glow-emerald leading-none mt-0.5">0</div>
+      </div>
+
+      <!-- Active Unlocked Screens -->
+      <div class="bg-cyber-black/70 border border-cyber-border rounded px-3 py-1 text-center min-w-[110px]">
+        <div class="text-[9px] uppercase tracking-wider text-slate-400">Active Unlocked</div>
+        <div id="metricUnlocked" class="text-lg font-bold text-cyber-crimson text-glow-crimson leading-none mt-0.5">0</div>
+      </div>
+
+      <!-- AirTags & Trackers -->
+      <div class="bg-cyber-black/70 border border-cyber-border rounded px-3 py-1 text-center min-w-[100px]">
+        <div class="text-[9px] uppercase tracking-wider text-slate-400">Find My Trackers</div>
+        <div id="metricAirTags" class="text-lg font-bold text-cyber-amber leading-none mt-0.5">0</div>
+      </div>
+    </div>
+
+    <!-- Controls & Actions -->
+    <div class="flex items-center space-x-3">
+      <!-- macOS Voice Alerts Toggle -->
+      <button id="toggleVoiceBtn" class="flex items-center space-x-2 px-3 py-1.5 rounded border border-cyber-emerald/40 bg-cyber-emerald/10 hover:bg-cyber-emerald/20 text-cyber-emerald text-xs tracking-wider transition">
+        <i data-lucide="volume-2" class="w-4 h-4"></i>
+        <span id="voiceStatusText">VOICE: ON</span>
+      </button>
+
+      <!-- Test Sound Button -->
+      <button id="testAudioBtn" title="Test voice alert" class="p-1.5 rounded border border-cyber-border hover:border-slate-500 bg-cyber-black text-slate-300 hover:text-white transition">
+        <i data-lucide="megaphone" class="w-4 h-4"></i>
+      </button>
+
+      <!-- Simulate Event Trigger (Demo / Verification) -->
+      <div class="relative group">
+        <button id="simMenuBtn" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded border border-cyber-border hover:border-cyber-purple/50 bg-cyber-black text-xs text-cyber-purple hover:bg-cyber-purple/10 transition">
+          <i data-lucide="flask-conical" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">SIMULATE</span>
+        </button>
+        <div class="hidden group-hover:block absolute right-0 top-full mt-1 w-48 bg-cyber-panel border border-cyber-border rounded shadow-xl py-1 z-30">
+          <button onclick="simulateEvent('screen_unlocked')" class="w-full text-left px-3 py-1.5 text-xs text-cyber-crimson hover:bg-cyber-crimson/10 flex items-center justify-between">
+            <span>Unlock Screen</span>
+            <span class="text-[10px] text-slate-500">0x10</span>
+          </button>
+          <button onclick="simulateEvent('airpods')" class="w-full text-left px-3 py-1.5 text-xs text-cyber-emerald hover:bg-cyber-emerald/10 flex items-center justify-between">
+            <span>Open AirPods</span>
+            <span class="text-[10px] text-slate-500">0x07</span>
+          </button>
+          <button onclick="simulateEvent('handoff')" class="w-full text-left px-3 py-1.5 text-xs text-cyber-purple hover:bg-cyber-purple/10 flex items-center justify-between">
+            <span>Trigger Handoff</span>
+            <span class="text-[10px] text-slate-500">0x0C</span>
+          </button>
+          <button onclick="simulateEvent('airtag')" class="w-full text-left px-3 py-1.5 text-xs text-cyber-amber hover:bg-cyber-amber/10 flex items-center justify-between">
+            <span>Separated AirTag</span>
+            <span class="text-[10px] text-slate-500">0x12</span>
+          </button>
+          <button onclick="simulateEvent('mac_rotation')" class="w-full text-left px-3 py-1.5 text-xs text-cyber-cyan hover:bg-cyber-cyan/10 flex items-center justify-between">
+            <span>Rotate MAC</span>
+            <span class="text-[10px] text-slate-500">RPA</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======================================================================== -->
+  <!-- MAIN WORKSPACE: LEFT INSPECTOR + CENTER RADAR + RIGHT INTELLIGENCE FEED -->
+  <!-- ======================================================================== -->
+  <main class="flex-1 flex overflow-hidden relative">
+
+    <!-- ---------------------------------------------------------------------- -->
+    <!-- LEFT SIDEBAR: TARGET INSPECTOR & DIRECTORY -->
+    <!-- ---------------------------------------------------------------------- -->
+    <aside class="w-80 flex-none border-r border-cyber-border bg-cyber-panel/95 flex flex-col z-10">
+      <!-- Tabs Header -->
+      <div class="h-10 border-b border-cyber-border flex items-center px-2 bg-cyber-black/60">
+        <button id="tabInspectorBtn" class="flex-1 text-center py-1.5 text-xs font-semibold text-cyber-emerald border-b-2 border-cyber-emerald transition">
+          TARGET INSPECTOR
+        </button>
+        <button id="tabDirectoryBtn" class="flex-1 text-center py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 transition">
+          DIRECTORY (<span id="dirCount">0</span>)
+        </button>
+      </div>
+
+      <!-- Tab Content 1: Inspector -->
+      <div id="inspectorTab" class="flex-1 overflow-y-auto p-3 space-y-3">
+        <div id="noSelectionNotice" class="h-64 flex flex-col items-center justify-center text-center p-4 text-slate-500">
+          <i data-lucide="crosshair" class="w-10 h-10 mb-2 opacity-30 text-cyber-emerald"></i>
+          <p class="text-xs">No target selected</p>
+          <p class="text-[10px] text-slate-600 mt-1">Click any blip on the tactical radar to lock & inspect payload</p>
+        </div>
+
+        <div id="selectedTargetContent" class="hidden space-y-3">
+          <!-- Target Identity & Alias -->
+          <div class="bg-cyber-black/80 border border-cyber-border rounded p-3 relative">
+            <div class="flex items-center justify-between mb-1">
+              <span id="inspVendorKind" class="text-[10px] uppercase tracking-wider text-slate-400">Apple • Nearby Info</span>
+              <button id="watchTargetBtn" class="text-xs flex items-center space-x-1 text-slate-400 hover:text-cyber-amber transition" title="Toggle Watch / Priority Alert">
+                <i data-lucide="star" class="w-3.5 h-3.5"></i>
+                <span id="watchText">WATCH</span>
+              </button>
+            </div>
+
+            <!-- Target Name / Custom Alias Input -->
+            <div class="flex items-center space-x-2 mt-1">
+              <input id="targetAliasInput" type="text" placeholder="Assign Custom Alias..." class="flex-1 bg-cyber-panel2 border border-cyber-border focus:border-cyber-emerald px-2 py-1 rounded text-xs text-white focus:outline-none">
+              <button id="saveAliasBtn" class="px-2 py-1 bg-cyber-emerald/10 hover:bg-cyber-emerald/20 border border-cyber-emerald/40 text-cyber-emerald rounded text-xs">
+                SET
+              </button>
+            </div>
+            
+            <!-- State Badge Banner -->
+            <div id="inspStateBanner" class="mt-2.5 py-1 px-2 rounded text-center text-xs font-bold tracking-wider bg-cyber-crimson/20 text-cyber-crimson border border-cyber-crimson/50 glow-crimson">
+              SCREEN UNLOCKED [ACTIVE USER]
+            </div>
+
+            <!-- Shown when probes returned conflicting models under this ID -->
+            <div id="inspAmbiguousBox" class="hidden mt-2 p-2 rounded bg-cyber-amber/15 border border-cyber-amber/60 text-cyber-amber space-y-1">
+              <div class="text-[11px] font-bold leading-tight">⚠ MULTIPLE DEVICES UNDER THIS ID — not a single device</div>
+              <div class="text-[10px] text-slate-300 leading-tight">Probes returned conflicting model numbers for this advertisement signature:</div>
+              <ul id="inspAmbiguousModels" class="text-[10px] font-mono list-disc pl-4 space-y-0.5"></ul>
+            </div>
+          </div>
+
+          <!-- Signal Telemetry & Sparkline -->
+          <div class="bg-cyber-black/80 border border-cyber-border rounded p-3">
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span class="text-slate-400">Signal Strength:</span>
+              <span id="inspRssiVal" class="font-bold text-cyber-emerald text-sm">-48 dBm</span>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-slate-500 mb-2">
+              <span>Best: <span id="inspBestRssi">-42 dBm</span></span>
+              <span>Distance Zone: <span id="inspZone" class="text-cyber-cyan">Same Room</span></span>
+            </div>
+
+            <!-- Live Sparkline Canvas -->
+            <div class="h-12 w-full bg-cyber-panel2 rounded relative overflow-hidden border border-cyber-border/60">
+              <canvas id="sparklineCanvas" class="w-full h-full"></canvas>
+            </div>
+          </div>
+
+          <!-- Anti-Tracking & MAC Rotation Details -->
+          <div class="bg-cyber-black/80 border border-cyber-border rounded p-3 space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-400">Entity ID (this address):</span>
+              <span id="inspFp" class="font-mono text-cyber-cyan font-bold">fc83a7a9</span>
+            </div>
+            <div class="flex items-center justify-between text-xs" title="Hash of the advertisement structure. Every device of the same model shares it, so it does not identify one device.">
+              <span class="text-slate-400">Advert Signature (not unique):</span>
+              <span id="inspSignature" class="font-mono text-slate-300"></span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-400">Deterministic Sector:</span>
+              <span id="inspSector" class="font-mono text-slate-300">142° SE</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-400">Grouped Addresses:</span>
+              <span id="inspMacCount" class="px-1.5 py-0.5 rounded bg-cyber-cyan/10 text-cyber-cyan border border-cyber-cyan/30 text-[10px] font-bold">
+                1 Mask
+              </span>
+            </div>
+
+            <div class="pt-1">
+              <div class="text-[10px] text-slate-400 mb-1">Current MAC:</div>
+              <div id="inspCurrentMac" class="text-[11px] font-mono text-slate-300 bg-cyber-panel2 p-1 rounded truncate border border-cyber-border/40">
+                FA:2B:3C:4D:5E:6F
+              </div>
+            </div>
+
+            <!-- Addresses grouped into this entity (only when probes confirmed the same model) -->
+            <div class="pt-1">
+              <button id="toggleMacHistoryBtn" class="w-full text-left flex items-center justify-between text-[10px] text-slate-400 hover:text-cyber-cyan">
+                <span>View Grouped Addresses (<span id="inspHistoricalCount">1</span>)</span>
+                <i data-lucide="chevron-down" class="w-3 h-3"></i>
+              </button>
+              <div id="macHistoryList" class="hidden mt-1 max-h-24 overflow-y-auto space-y-1 text-[10px] font-mono text-slate-400 bg-cyber-panel2 p-1.5 rounded border border-cyber-border">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Decoded Apple Continuity Details -->
+          <div id="inspContinuityBox" class="bg-cyber-black/80 border border-cyber-border rounded p-3 space-y-2 text-xs">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Apple Continuity DPI</span>
+              <span class="text-[9px] text-cyber-emerald">0x004C</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2 text-[11px]">
+              <div class="bg-cyber-panel2 p-1.5 rounded">
+                <div class="text-[9px] text-slate-500">Screen State</div>
+                <div id="inspDpiScreen" class="font-bold text-cyber-crimson">UNLOCKED</div>
+              </div>
+              <div class="bg-cyber-panel2 p-1.5 rounded">
+                <div class="text-[9px] text-slate-500">Action Code</div>
+                <div id="inspDpiAction" class="font-mono text-slate-300">0x01</div>
+              </div>
+              <div class="bg-cyber-panel2 p-1.5 rounded">
+                <div class="text-[9px] text-slate-500">Active Audio</div>
+                <div id="inspDpiAudio" class="font-bold text-slate-400">NO</div>
+              </div>
+              <div class="bg-cyber-panel2 p-1.5 rounded">
+                <div class="text-[9px] text-slate-500">Watch Link</div>
+                <div id="inspDpiWatch" class="font-bold text-slate-400">NO</div>
+              </div>
+            </div>
+
+            <!-- AirPods Battery if applicable -->
+            <div id="inspAirPodsBox" class="hidden bg-cyber-panel2 p-2 rounded space-y-1">
+              <div class="text-[10px] text-cyber-emerald font-semibold">AirPods Battery Status:</div>
+              <div class="grid grid-cols-3 gap-1 text-[10px] text-center">
+                <div class="bg-cyber-black p-1 rounded">L: <span id="batL" class="text-white">100%</span></div>
+                <div class="bg-cyber-black p-1 rounded">R: <span id="batR" class="text-white">100%</span></div>
+                <div class="bg-cyber-black p-1 rounded">Case: <span id="batC" class="text-white">80%</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Register the selected node as one of MY devices (trusted_devices.json) -->
+          <div class="space-y-1">
+            <button id="trustDeviceBtn" class="w-full py-2.5 px-3 rounded bg-cyber-emerald/10 hover:bg-cyber-emerald/20 border border-cyber-emerald/50 text-cyber-emerald text-xs font-bold tracking-wider transition">
+              🛡️ ADD TO TRUSTED ALLOWLIST
+            </button>
+            <div id="trustDeviceHint" class="text-[10px] text-slate-500 leading-tight">Only add devices you own, held within ~1m. Allowlisted devices can be read from the SELF-PROBE panel below.</div>
+          </div>
+
+          <!-- Raw HEX Payload Dump -->
+          <div class="bg-cyber-black/80 border border-cyber-border rounded p-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
+              <span>Raw Manufacturer Hex</span>
+              <button onclick="copyHex()" class="text-[9px] text-slate-400 hover:text-cyber-cyan">COPY</button>
+            </div>
+            <pre id="inspRawHex" class="text-[10px] font-mono text-cyber-emerald bg-cyber-panel2 p-2 rounded overflow-x-auto leading-relaxed border border-cyber-border/40">10 03 01 01 00</pre>
+          </div>
+        </div>
+
+        <!-- SELF-PROBE (Allowlisted Devices Only) -->
+        <div id="selfProbePanel" class="bg-cyber-black/80 border border-cyber-cyan/40 rounded p-3 space-y-2">
+          <div class="text-[10px] uppercase tracking-wider text-cyber-cyan font-bold">SELF-PROBE (Allowlisted Devices Only)</div>
+          <div class="flex items-center space-x-2">
+            <select id="selfProbeSelect" class="flex-1 min-w-0 bg-cyber-panel2 border border-cyber-border focus:border-cyber-cyan px-2 py-1.5 rounded text-xs text-white focus:outline-none">
+              <option value="">— no allowlisted devices —</option>
+            </select>
+            <button id="selfProbeRemoveBtn" disabled title="Remove selected device from trusted_devices.json" class="px-2 py-1.5 rounded border border-cyber-border text-slate-400 hover:text-cyber-crimson hover:border-cyber-crimson/50 text-xs disabled:opacity-40 disabled:cursor-not-allowed">✕</button>
+          </div>
+          <button id="selfProbeBtn" disabled class="w-full py-2.5 px-3 rounded bg-cyber-cyan/15 hover:bg-cyber-cyan/30 border border-cyber-cyan/50 text-cyber-cyan text-xs font-bold tracking-wider transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-cyber-cyan/15">
+            ⚡ READ MY DEVICE
+          </button>
+          <div id="selfProbeStatus" class="hidden text-[10px] leading-tight p-2 rounded border"></div>
+
+          <div id="selfProbeCard" class="hidden bg-cyber-panel2/60 border border-cyber-border rounded p-2.5 space-y-2">
+            <div class="flex items-center justify-between text-[9px] text-slate-500 font-mono">
+              <span id="probeCardAddress" class="truncate"></span>
+              <span id="probeCardTime"></span>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="bg-cyber-black/70 p-2 rounded col-span-2">
+                <div class="text-[9px] text-slate-500 uppercase">Model</div>
+                <div id="probeCardModel" class="font-bold text-sm mt-0.5 break-words"></div>
+              </div>
+              <div class="bg-cyber-black/70 p-2 rounded col-span-2">
+                <div class="text-[9px] text-slate-500 uppercase">Manufacturer</div>
+                <div id="probeCardManufacturer" class="text-[11px] mt-0.5 break-words"></div>
+              </div>
+              <div class="bg-cyber-black/70 p-2 rounded">
+                <div class="text-[9px] text-slate-500 uppercase">Firmware</div>
+                <div id="probeCardFirmware" class="font-mono text-[11px] mt-0.5 break-words"></div>
+              </div>
+              <div class="bg-cyber-black/70 p-2 rounded">
+                <div class="text-[9px] text-slate-500 uppercase">Battery</div>
+                <div id="probeCardBattery" class="font-bold text-[11px] mt-0.5"></div>
+              </div>
+            </div>
+            <details>
+              <summary class="cursor-pointer text-[10px] text-slate-400 hover:text-cyber-cyan py-1 select-none">Discovered services / characteristics (<span id="probeCardCounts">0</span>)</summary>
+              <div id="probeCardTree" class="mt-1 max-h-56 overflow-y-auto space-y-1.5 text-[10px] font-mono"></div>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab Content 2: Directory -->
+      <div id="directoryTab" class="hidden flex-1 overflow-y-auto p-2 space-y-1.5">
+        <!-- Search bar -->
+        <div class="p-1 mb-1">
+          <input id="dirSearchInput" type="text" placeholder="Search target name, FP, MAC..." class="w-full bg-cyber-black border border-cyber-border focus:border-cyber-emerald px-2 py-1 rounded text-xs text-white focus:outline-none">
+        </div>
+        <!-- Target cards container -->
+        <div id="dirList" class="space-y-1">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </aside>
+
+    <!-- ---------------------------------------------------------------------- -->
+    <!-- CENTER: FULL-SCREEN TACTICAL RADAR CANVAS -->
+    <!-- ---------------------------------------------------------------------- -->
+    <div class="flex-1 flex flex-col relative overflow-hidden bg-cyber-black">
+      <!-- Radar HUD Overlay Info -->
+      <div class="absolute top-3 left-4 pointer-events-none z-10 flex items-center space-x-3 text-[10px] text-slate-400">
+        <div class="flex items-center space-x-1.5 bg-cyber-panel/80 px-2 py-1 rounded border border-cyber-border">
+          <span class="w-2 h-2 rounded-full bg-cyber-emerald animate-pulse"></span>
+          <span>SWEEP: 60 FPS</span>
+        </div>
+        <div class="bg-cyber-panel/80 px-2 py-1 rounded border border-cyber-border">
+          <span>CENTER: (0,0) HOST</span>
+        </div>
+        <div id="radarTargetCount" class="bg-cyber-panel/80 px-2 py-1 rounded border border-cyber-border text-cyber-cyan">
+          0 TARGETS IN SECTOR
+        </div>
+      </div>
+
+      <!-- Distance Legend (Bottom Left) -->
+      <div class="absolute bottom-3 left-4 pointer-events-none z-10 text-[9px] text-slate-400 bg-cyber-panel/80 px-3 py-2 rounded border border-cyber-border space-y-1 hidden sm:block">
+        <div class="text-[10px] font-bold text-cyber-emerald mb-1">RSSI DISTANCE RINGS:</div>
+        <div class="flex items-center space-x-2">
+          <span class="w-2 h-2 rounded-full border border-cyber-emerald"></span>
+          <span>Ring 1: &gt; -55 dBm (Desk / Immediate)</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="w-2 h-2 rounded-full border border-cyber-cyan"></span>
+          <span>Ring 2: -56 to -70 dBm (Same Room)</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="w-2 h-2 rounded-full border border-slate-500"></span>
+          <span>Ring 3: -71 to -85 dBm (Adjacent Room / Hall)</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="w-2 h-2 rounded-full border border-slate-700"></span>
+          <span>Ring 4: -86 to -100 dBm (Perimeter / Street)</span>
+        </div>
+      </div>
+
+      <!-- Canvas -->
+      <div id="canvasContainer" class="flex-1 w-full h-full relative cursor-crosshair">
+        <canvas id="radarCanvas" class="w-full h-full block"></canvas>
+      </div>
+    </div>
+
+    <!-- ---------------------------------------------------------------------- -->
+    <!-- RIGHT SIDEBAR: LIVE INTELLIGENCE & ACTIVITY FEED -->
+    <!-- ---------------------------------------------------------------------- -->
+    <aside class="w-96 flex-none border-l border-cyber-border bg-cyber-panel/95 flex flex-col z-10">
+      <!-- Feed Header & Controls -->
+      <div class="h-10 border-b border-cyber-border px-3 flex items-center justify-between bg-cyber-black/60">
+        <div class="flex items-center space-x-2">
+          <span class="w-2 h-2 rounded-full bg-cyber-crimson animate-ping"></span>
+          <span class="text-xs font-bold tracking-wider text-slate-200">LIVE INTELLIGENCE STREAM</span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <button id="clearFeedBtn" title="Clear log" class="p-1 rounded text-slate-400 hover:text-white hover:bg-cyber-panel transition">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+          <button id="autoScrollBtn" title="Auto-scroll" class="p-1 rounded text-cyber-emerald hover:bg-cyber-panel transition">
+            <i data-lucide="arrow-down-to-line" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Chips -->
+      <div class="p-2 border-b border-cyber-border/60 bg-cyber-panel2/50 flex flex-wrap gap-1">
+        <button onclick="setFilter('all')" id="filter-all" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-cyber-emerald text-cyber-black transition">
+          ALL
+        </button>
+        <button onclick="setFilter('apple')" id="filter-apple" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-cyber-black text-slate-400 hover:text-white border border-cyber-border transition">
+          APPLE 0x004C
+        </button>
+        <button onclick="setFilter('unlocked')" id="filter-unlocked" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-cyber-black text-cyber-crimson hover:bg-cyber-crimson/10 border border-cyber-border transition">
+          UNLOCKED
+        </button>
+        <button onclick="setFilter('proximity')" id="filter-proximity" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-cyber-black text-slate-400 hover:text-white border border-cyber-border transition">
+          &gt; -70 dBm
+        </button>
+        <button onclick="setFilter('airtag')" id="filter-airtag" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-cyber-black text-cyber-amber hover:bg-cyber-amber/10 border border-cyber-border transition">
+          AIRTAGS
+        </button>
+      </div>
+
+      <!-- Event Stream Log -->
+      <div id="eventFeed" class="flex-1 overflow-y-auto p-2 space-y-1.5 font-mono text-xs">
+        <!-- Event items will be dynamically injected here -->
+      </div>
+
+      <!-- Terminal Status Bar -->
+      <div class="h-7 border-t border-cyber-border bg-cyber-black/80 px-3 flex items-center justify-between text-[10px] text-slate-500">
+        <span id="feedCount">0 events logged</span>
+        <span class="flex items-center space-x-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-cyber-emerald"></span>
+          <span>DPI ENGINE ACTIVE</span>
+        </span>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- ======================================================================== -->
+  <!-- JAVASCRIPT: RADAR ENGINE, WEBSOCKET CLIENT & STATE MANAGEMENT -->
+  <!-- ======================================================================== -->
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // App State
+    const state = {
+      ws: null,
+      entities: new Map(), // fp -> entity
+      events: [],
+      selectedFp: null,
+      hoveredFp: null,
+      activeFilter: 'all',
+      autoScroll: true,
+      voiceAlerts: true,
+      aliases: JSON.parse(localStorage.getItem('ghostwall_aliases') || '{}'),
+      watchedTargets: new Set(JSON.parse(localStorage.getItem('ghostwall_watched') || '[]')),
+      tab: 'inspector', // 'inspector' | 'directory'
+      trusted: [],            // mirror of trusted_devices.json
+      probeResults: {},       // address (lowercase) -> { data, time }
+      probePending: null,     // address currently being read
+    };
+
+    // DOM Elements
+    const canvas = document.getElementById('radarCanvas');
+    const ctx = canvas.getContext('2d');
+    const canvasContainer = document.getElementById('canvasContainer');
+    const wsStatusEl = document.getElementById('wsStatus');
+    const metricMacs = document.getElementById('metricMacs');
+    const metricEntities = document.getElementById('metricEntities');
+    const metricUnlocked = document.getElementById('metricUnlocked');
+    const metricAirTags = document.getElementById('metricAirTags');
+    const eventFeedEl = document.getElementById('eventFeed');
+    const feedCountEl = document.getElementById('feedCount');
+    const toggleVoiceBtn = document.getElementById('toggleVoiceBtn');
+    const voiceStatusText = document.getElementById('voiceStatusText');
+
+    // ------------------------------------------------------------------------
+    // Sparkline Canvas Initialization
+    // ------------------------------------------------------------------------
+    const sparkCanvas = document.getElementById('sparklineCanvas');
+    const sparkCtx = sparkCanvas ? sparkCanvas.getContext('2d') : null;
+
+    function renderSparkline(rssiHistory) {
+      if (!sparkCtx || !rssiHistory || rssiHistory.length < 2) return;
+      const w = sparkCanvas.width = sparkCanvas.clientWidth * window.devicePixelRatio;
+      const h = sparkCanvas.height = sparkCanvas.clientHeight * window.devicePixelRatio;
+      sparkCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      const width = sparkCanvas.clientWidth;
+      const height = sparkCanvas.clientHeight;
+
+      sparkCtx.clearRect(0, 0, width, height);
+
+      const minRssi = -100;
+      const maxRssi = -35;
+      const range = maxRssi - minRssi;
+
+      // Draw horizontal grid lines
+      sparkCtx.strokeStyle = '#162238';
+      sparkCtx.lineWidth = 1;
+      [-55, -70, -85].forEach(thresh => {
+        const y = height - ((thresh - minRssi) / range) * height;
+        sparkCtx.beginPath();
+        sparkCtx.moveTo(0, y);
+        sparkCtx.lineTo(width, y);
+        sparkCtx.stroke();
+      });
+
+      // Draw sparkline curve
+      const step = width / (rssiHistory.length - 1);
+      sparkCtx.beginPath();
+      rssiHistory.forEach((val, i) => {
+        const clamped = Math.max(minRssi, Math.min(maxRssi, val));
+        const x = i * step;
+        const y = height - ((clamped - minRssi) / range) * height;
+        if (i === 0) sparkCtx.moveTo(x, y);
+        else sparkCtx.lineTo(x, y);
+      });
+
+      sparkCtx.strokeStyle = '#00ff9d';
+      sparkCtx.lineWidth = 2;
+      sparkCtx.stroke();
+
+      // Fill area under sparkline
+      sparkCtx.lineTo(width, height);
+      sparkCtx.lineTo(0, height);
+      sparkCtx.closePath();
+      const grad = sparkCtx.createLinearGradient(0, 0, 0, height);
+      grad.addColorStop(0, 'rgba(0, 255, 157, 0.25)');
+      grad.addColorStop(1, 'rgba(0, 255, 157, 0.0)');
+      sparkCtx.fillStyle = grad;
+      sparkCtx.fill();
+    }
+
+    // ------------------------------------------------------------------------
+    // WebSocket Connection Management
+    // ------------------------------------------------------------------------
+    function initWebSocket() {
+      const wsUrl = `ws://${window.location.hostname || 'localhost'}:8765`;
+      wsStatusEl.innerHTML = `
+        <span class="w-1.5 h-1.5 rounded-full bg-cyber-amber animate-ping"></span>
+        <span class="text-cyber-amber">CONNECTING</span>
+      `;
+
+      state.ws = new WebSocket(wsUrl);
+
+      state.ws.onopen = () => {
+        wsStatusEl.innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full bg-cyber-emerald"></span>
+          <span class="text-cyber-emerald">ONLINE (8765)</span>
+        `;
+      };
+
+      state.ws.onclose = () => {
+        state.probePending = null;
+        updateSelfProbeControls();
+        wsStatusEl.innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full bg-cyber-crimson animate-ping"></span>
+          <span class="text-cyber-crimson">OFFLINE (RECONNECTING...)</span>
+        `;
+        setTimeout(initWebSocket, 2000);
+      };
+
+      state.ws.onerror = () => {
+        wsStatusEl.innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full bg-cyber-crimson"></span>
+          <span class="text-cyber-crimson">ERR</span>
+        `;
+      };
+
+      state.ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          handleServerMessage(msg);
+        } catch (e) {
+          console.error('Failed to parse WS packet:', e);
+        }
+      };
+    }
+
+    function handleServerMessage(msg) {
+      if (msg.type === 'radar_state') {
+        updateRadarState(msg);
+      } else if (msg.type === 'activity_event') {
+        addActivityEvent(msg.event);
+      } else if (msg.type === 'probe_result') {
+        handleProbeResult(msg);
+      } else if (msg.type === 'trusted_devices') {
+        state.trusted = msg.devices || [];
+        setTrustHint(null);
+        renderTrusted();
+      } else if (msg.type === 'trust_error') {
+        setTrustHint(`Not added: ${msg.error}`);
+      } else if (msg.type === 'config_updated') {
+        state.voiceAlerts = msg.voice_alerts_enabled;
+        updateVoiceButton();
+      }
+    }
+
+    function updateRadarState(data) {
+      // Update Top HUD stats
+      if (data.stats) {
+        metricMacs.innerText = data.stats.total_macs_seen || 0;
+        metricEntities.innerText = data.stats.unique_entities || 0;
+        metricUnlocked.innerText = data.stats.unlocked_screens || 0;
+        metricAirTags.innerText = data.stats.airtags_count || 0;
+        state.voiceAlerts = data.stats.voice_alerts_enabled;
+        updateVoiceButton();
+      }
+
+      // Update Entities Map with visual animation smoothing
+      const seenFps = new Set();
+      if (data.entities) {
+        data.entities.forEach(ent => {
+          seenFps.add(ent.fp);
+          const existing = state.entities.get(ent.fp);
+          if (existing) {
+            // Keep animation interpolation state
+            ent.currentR = existing.currentR || ent.rssi_ema;
+            ent.blipTime = existing.blipTime || 0;
+            ent.shockwavePhase = existing.shockwavePhase || 0;
+            state.entities.set(ent.fp, ent);
+          } else {
+            ent.currentR = ent.rssi_ema;
+            ent.blipTime = Date.now();
+            ent.shockwavePhase = 0;
+            state.entities.set(ent.fp, ent);
+          }
+        });
+      }
+
+      // Remove expired entities
+      for (const [fp] of state.entities) {
+        if (!seenFps.has(fp)) {
+          state.entities.delete(fp);
+          if (state.selectedFp === fp) {
+            updateInspector(null);
+          }
+        }
+      }
+
+      document.getElementById('radarTargetCount').innerText = `${state.entities.size} TARGETS IN SECTOR`;
+      document.getElementById('dirCount').innerText = state.entities.size;
+
+      // Update selected inspector if open
+      if (state.selectedFp && state.entities.has(state.selectedFp)) {
+        updateInspector(state.entities.get(state.selectedFp));
+      }
+
+      // Update directory list if tab is open
+      if (state.tab === 'directory') {
+        renderDirectory();
+      }
+    }
+
+    function addActivityEvent(ev) {
+      state.events.unshift(ev);
+      if (state.events.length > 300) state.events.pop();
+
+      // Trigger target flash bloom on radar
+      const ent = state.entities.get(ev.fp);
+      if (ent) {
+        ent.blipTime = Date.now();
+      }
+
+      renderEventFeed();
+    }
+
+    // ------------------------------------------------------------------------
+    // Activity Feed Rendering
+    // ------------------------------------------------------------------------
+    function setFilter(filter) {
+      state.activeFilter = filter;
+      ['all', 'apple', 'unlocked', 'proximity', 'airtag'].forEach(f => {
+        const btn = document.getElementById(`filter-${f}`);
+        if (f === filter) {
+          btn.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-cyber-emerald text-cyber-black transition';
+        } else {
+          btn.className = 'px-2 py-0.5 rounded text-[10px] font-semibold bg-cyber-black text-slate-400 hover:text-white border border-cyber-border transition';
+        }
+      });
+      renderEventFeed();
+    }
+
+    function renderEventFeed() {
+      feedCountEl.innerText = `${state.events.length} events logged`;
+      
+      const filtered = state.events.filter(ev => {
+        if (state.activeFilter === 'apple') return ev.vendor === 'Apple';
+        if (state.activeFilter === 'unlocked') return ev.action === 'screen_unlocked';
+        if (state.activeFilter === 'proximity') return ev.rssi > -70;
+        if (state.activeFilter === 'airtag') return ev.action === 'airtag' || ev.kind.includes('Find My');
+        return true;
+      });
+
+      eventFeedEl.innerHTML = '';
+      if (filtered.length === 0) {
+        eventFeedEl.innerHTML = `
+          <div class="h-32 flex items-center justify-center text-slate-600 text-[11px]">
+            No activity matches filter
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(ev => {
+        const item = document.createElement('div');
+        item.className = 'p-2 rounded bg-cyber-black/70 border border-cyber-border hover:border-slate-500 cursor-pointer transition text-[11px] leading-tight space-y-1';
+        
+        // Color coding by action
+        let badgeColor = 'text-slate-400 bg-slate-800/50 border-slate-700';
+        let actionBadge = ev.action.toUpperCase();
+        
+        if (ev.action === 'screen_unlocked') {
+          badgeColor = 'text-cyber-crimson bg-cyber-crimson/15 border-cyber-crimson/40';
+          actionBadge = 'UNLOCKED';
+        } else if (ev.action === 'handoff') {
+          badgeColor = 'text-cyber-purple bg-cyber-purple/15 border-cyber-purple/40';
+          actionBadge = 'HANDOFF';
+        } else if (ev.action === 'airpods_open') {
+          badgeColor = 'text-cyber-emerald bg-cyber-emerald/15 border-cyber-emerald/40';
+          actionBadge = 'AIRPODS';
+        } else if (ev.action === 'airtag') {
+          badgeColor = 'text-cyber-amber bg-cyber-amber/15 border-cyber-amber/40';
+          actionBadge = 'AIRTAG ALERT';
+        } else if (ev.action === 'mac_rotation') {
+          badgeColor = 'text-cyber-cyan bg-cyber-cyan/15 border-cyber-cyan/40';
+          actionBadge = 'MAC ROTATED';
+        } else if (ev.action === 'proximity') {
+          badgeColor = 'text-cyber-emerald bg-cyber-emerald/15 border-cyber-emerald/40';
+          actionBadge = 'PROXIMITY';
+        }
+
+        const alias = state.aliases[ev.fp];
+        const displayLabel = alias ? `"${alias}" (${ev.fp})` : `Target ${ev.fp}`;
+
+        item.innerHTML = `
+          <div class="flex items-center justify-between text-[10px] text-slate-400">
+            <span class="font-mono">${ev.time_str}</span>
+            <span class="px-1.5 py-0.2 rounded border ${badgeColor} text-[9px] font-bold tracking-wider">${actionBadge}</span>
+          </div>
+          <div class="font-semibold text-slate-200">
+            ${displayLabel} <span class="text-cyber-emerald font-normal">(${ev.rssi} dBm)</span>
+          </div>
+          <div class="text-[10px] text-slate-400 truncate">
+            ${ev.description}
+          </div>
+        `;
+
+        item.onclick = () => {
+          selectTarget(ev.fp);
+        };
+
+        eventFeedEl.appendChild(item);
+      });
+
+      if (state.autoScroll) {
+        eventFeedEl.scrollTop = 0;
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // Target Inspector Logic
+    // ------------------------------------------------------------------------
+    function selectTarget(fp) {
+      state.selectedFp = fp;
+      setTrustHint(null);
+      const ent = state.entities.get(fp);
+      if (ent) {
+        updateInspector(ent);
+        // Switch to inspector tab
+        showTab('inspector');
+      }
+    }
+
+    function updateInspector(ent) {
+      const notice = document.getElementById('noSelectionNotice');
+      const content = document.getElementById('selectedTargetContent');
+
+      if (!ent) {
+        notice.classList.remove('hidden');
+        content.classList.add('hidden');
+        return;
+      }
+
+      notice.classList.add('hidden');
+      content.classList.remove('hidden');
+
+      const alias = state.aliases[ent.fp] || '';
+      document.getElementById('targetAliasInput').value = alias;
+      document.getElementById('inspVendorKind').innerText = `${ent.vendor} • ${ent.kind}`;
+      document.getElementById('inspFp').innerText = ent.fp;
+      document.getElementById('inspSector').innerText = `${Math.round(ent.angle)}° Sector`;
+      document.getElementById('inspRssiVal').innerText = `${ent.rssi} dBm`;
+      document.getElementById('inspBestRssi').innerText = `${ent.best_rssi} dBm`;
+      document.getElementById('inspCurrentMac').innerText = ent.current_address;
+      document.getElementById('inspMacCount').innerText = ent.mac_count > 1 ? `${ent.mac_count} (same model, probe-confirmed)` : '1 (ungrouped)';
+      document.getElementById('inspSignature').innerText = ent.signature || '—';
+
+      // Ambiguity warning: conflicting models were read under this ID
+      const ambBox = document.getElementById('inspAmbiguousBox');
+      if (ent.ambiguous) {
+        ambBox.classList.remove('hidden');
+        document.getElementById('inspAmbiguousModels').innerHTML = (ent.models_seen || []).map(m =>
+          `<li>${esc(m.model && m.model !== m.model_number ? `${m.model} (${m.model_number})` : m.model_number)}</li>`).join('');
+      } else {
+        ambBox.classList.add('hidden');
+      }
+
+      // Distance zone label
+      let zone = 'Perimeter';
+      if (ent.rssi >= -55) zone = 'Desk / Immediate';
+      else if (ent.rssi >= -70) zone = 'Same Room';
+      else if (ent.rssi >= -85) zone = 'Adjacent Room / Hallway';
+      document.getElementById('inspZone').innerText = zone;
+
+      // Watch status
+      const isWatched = state.watchedTargets.has(ent.fp);
+      const watchBtn = document.getElementById('watchTargetBtn');
+      const watchText = document.getElementById('watchText');
+      if (isWatched) {
+        watchBtn.className = 'text-xs flex items-center space-x-1 text-cyber-amber font-bold';
+        watchText.innerText = 'WATCHED';
+      } else {
+        watchBtn.className = 'text-xs flex items-center space-x-1 text-slate-400 hover:text-cyber-amber transition';
+        watchText.innerText = 'WATCH';
+      }
+
+      // State banner
+      const banner = document.getElementById('inspStateBanner');
+      if (ent.continuity && ent.continuity.screen_unlocked) {
+        banner.className = 'mt-2.5 py-1 px-2 rounded text-center text-xs font-bold tracking-wider bg-cyber-crimson/20 text-cyber-crimson border border-cyber-crimson/50 glow-crimson animate-pulse';
+        banner.innerText = 'SCREEN UNLOCKED [ACTIVE USER]';
+      } else if (ent.continuity && ent.continuity.handoff_active) {
+        banner.className = 'mt-2.5 py-1 px-2 rounded text-center text-xs font-bold tracking-wider bg-cyber-purple/20 text-cyber-purple border border-cyber-purple/50';
+        banner.innerText = 'HANDOFF ACTIVE [APP SWITCH / CLIPBOARD]';
+      } else if (ent.continuity && ent.continuity.airpods_open) {
+        banner.className = 'mt-2.5 py-1 px-2 rounded text-center text-xs font-bold tracking-wider bg-cyber-emerald/20 text-cyber-emerald border border-cyber-emerald/50';
+        banner.innerText = 'AIRPODS CASE OPEN';
+      } else if (ent.continuity && ent.continuity.find_my_separated === true) {
+        banner.className = 'mt-2.5 py-1 px-2 rounded text-center text-xs font-bold tracking-wider bg-cyber-amber/20 text-cyber-amber border border-cyber-amber/50 glow-emerald';
+        banner.innerText = 'AIRTAG SEPARATED FROM OWNER';
+      } else if (ent.continuity && ent.continuity.screen_state_known) {
+        banner.className = 'mt-2.5 py-1 px-2 rounded text-center text-xs font-bold tracking-wider bg-slate-800 text-slate-400 border border-slate-700';
+        banner.innerText = 'STANDBY / SCREEN LOCKED';
+      } else {
+        banner.className = 'mt-2.5 py-1 px-2 rounded text-center text-xs font-bold tracking-wider bg-slate-800 text-slate-400 border border-slate-700';
+        banner.innerText = 'IDLE BLE TARGET';
+      }
+
+      // Sparkline
+      renderSparkline(ent.rssi_history);
+
+      // Historical MAC addresses
+      document.getElementById('inspHistoricalCount').innerText = ent.addresses ? ent.addresses.length : 1;
+      const historyList = document.getElementById('macHistoryList');
+      historyList.innerHTML = '';
+      if (ent.addresses) {
+        ent.addresses.forEach((addr, idx) => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between py-0.5 border-b border-cyber-border/30';
+          row.innerHTML = `
+            <span>#${idx + 1} ${addr}</span>
+            <span class="text-[9px] text-slate-500">${addr === ent.current_address ? 'ACTIVE' : 'PROBE-CONFIRMED'}</span>
+          `;
+          historyList.appendChild(row);
+        });
+      }
+
+      // Continuity Breakdown
+      const cont = ent.continuity || {};
+      document.getElementById('inspDpiScreen').innerText = cont.screen_unlocked ? 'UNLOCKED' : (cont.screen_state_known ? 'LOCKED' : 'UNKNOWN');
+      document.getElementById('inspDpiScreen').className = cont.screen_unlocked ? 'font-bold text-cyber-crimson' : 'font-bold text-slate-400';
+      document.getElementById('inspDpiAction').innerText = cont.action_code_hex || '0x00';
+      document.getElementById('inspDpiAudio').innerText = cont.active_audio ? 'YES' : 'NO';
+      document.getElementById('inspDpiAudio').className = cont.active_audio ? 'font-bold text-cyber-emerald' : 'font-bold text-slate-400';
+      document.getElementById('inspDpiWatch').innerText = cont.watch_connected ? 'CONNECTED' : 'NO';
+      document.getElementById('inspDpiWatch').className = cont.watch_connected ? 'font-bold text-cyber-cyan' : 'font-bold text-slate-400';
+
+      // AirPods battery if present
+      const apBox = document.getElementById('inspAirPodsBox');
+      if (cont.battery) {
+        apBox.classList.remove('hidden');
+        document.getElementById('batL').innerText = cont.battery.left;
+        document.getElementById('batR').innerText = cont.battery.right;
+        document.getElementById('batC').innerText = cont.battery.case;
+      } else {
+        apBox.classList.add('hidden');
+      }
+
+      // Raw Hex
+      document.getElementById('inspRawHex').innerText = ent.raw_hex || 'No manufacturer hex';
+
+      updateTrustButton();
+    }
+
+    const NOT_EXPOSED = 'not exposed';
+
+    function esc(v) {
+      return String(v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    }
+
+    function wsSend(payload) {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify(payload));
+        return true;
+      }
+      setProbeStatus('error', 'WebSocket is offline.');
+      return false;
+    }
+
+    const TRUST_HINT_DEFAULT = 'Only add devices you own, held within ~1m. Allowlisted devices can be read from the SELF-PROBE panel below.';
+
+    // Message under the allowlist button; pass null to restore the default hint
+    function setTrustHint(error) {
+      const el = document.getElementById('trustDeviceHint');
+      el.innerText = error || TRUST_HINT_DEFAULT;
+      el.className = error ? 'text-[10px] leading-tight text-cyber-amber font-bold' : 'text-[10px] text-slate-500 leading-tight';
+    }
+
+    function isTrusted(address) {
+      const a = (address || '').toLowerCase();
+      return !!a && state.trusted.some(d => d.address.toLowerCase() === a);
+    }
+
+    // Inspector button: add / remove the selected radar node in trusted_devices.json
+    function updateTrustButton() {
+      const btn = document.getElementById('trustDeviceBtn');
+      const ent = state.selectedFp ? state.entities.get(state.selectedFp) : null;
+      if (!ent) return;
+      if (isTrusted(ent.current_address)) {
+        btn.innerText = '✓ IN TRUSTED ALLOWLIST — REMOVE';
+        btn.className = 'w-full py-2.5 px-3 rounded bg-cyber-panel2 hover:bg-cyber-crimson/15 border border-cyber-border hover:border-cyber-crimson/50 text-slate-300 hover:text-cyber-crimson text-xs font-bold tracking-wider transition';
+      } else {
+        btn.innerText = '🛡️ ADD TO TRUSTED ALLOWLIST';
+        btn.className = 'w-full py-2.5 px-3 rounded bg-cyber-emerald/10 hover:bg-cyber-emerald/20 border border-cyber-emerald/50 text-cyber-emerald text-xs font-bold tracking-wider transition';
+      }
+    }
+
+    // Dropdown is populated only from the server's trusted_devices.json
+    function renderTrusted() {
+      const select = document.getElementById('selfProbeSelect');
+      const previous = select.value;
+      select.innerHTML = '';
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = state.trusted.length ? '— select one of your devices —' : '— no allowlisted devices —';
+      select.appendChild(placeholder);
+      state.trusted.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.address;
+        opt.textContent = d.label && d.label !== d.address ? `${d.label} · ${d.address}` : d.address;
+        select.appendChild(opt);
+      });
+      select.value = isTrusted(previous) ? previous : '';
+      updateSelfProbeControls();
+      updateTrustButton();
+    }
+
+    function updateSelfProbeControls() {
+      const address = document.getElementById('selfProbeSelect').value;
+      const ok = isTrusted(address);
+      const btn = document.getElementById('selfProbeBtn');
+      btn.disabled = !ok || !!state.probePending;
+      btn.innerText = state.probePending ? 'READING… (up to 10s)' : '⚡ READ MY DEVICE';
+      document.getElementById('selfProbeRemoveBtn').disabled = !ok || !!state.probePending;
+
+      const cached = ok ? state.probeResults[address.toLowerCase()] : null;
+      if (cached) {
+        renderProbeCard(address, cached);
+      } else {
+        document.getElementById('selfProbeCard').classList.add('hidden');
+      }
+    }
+
+    function setProbeStatus(kind, text) {
+      const el = document.getElementById('selfProbeStatus');
+      if (!kind) { el.classList.add('hidden'); return; }
+      const styles = {
+        info: 'bg-cyber-cyan/10 border-cyber-cyan/40 text-cyber-cyan',
+        refused: 'bg-cyber-amber/10 border-cyber-amber/40 text-cyber-amber',
+        error: 'bg-cyber-crimson/15 border-cyber-crimson/40 text-cyber-crimson',
+      };
+      el.className = `text-[10px] leading-tight p-2 rounded border ${styles[kind]}`;
+      el.innerText = text;
+    }
+
+    function probeValueHtml(value) {
+      const missing = value === NOT_EXPOSED || value === null || value === undefined || value === '';
+      return missing ? `<span class="text-slate-500 italic">${NOT_EXPOSED}</span>` : `<span class="text-cyber-emerald">${esc(value)}</span>`;
+    }
+
+    function renderProbeCard(address, result) {
+      const data = result.data;
+      const v = data.readable_values || {};
+      const rawModel = v.model_number;
+      let model = data.model;
+      if (model && model !== NOT_EXPOSED && rawModel && rawModel !== NOT_EXPOSED && rawModel !== model) {
+        model = `${model} (${rawModel})`;
+      }
+      const firmware = v.firmware_revision !== NOT_EXPOSED ? v.firmware_revision : v.software_revision;
+      const battery = (typeof v.battery_level === 'number') ? `${v.battery_level}%` : NOT_EXPOSED;
+
+      document.getElementById('probeCardAddress').innerText = address;
+      document.getElementById('probeCardTime').innerText = result.time;
+      document.getElementById('probeCardModel').innerHTML = probeValueHtml(model);
+      document.getElementById('probeCardManufacturer').innerHTML = probeValueHtml(v.manufacturer);
+      document.getElementById('probeCardFirmware').innerHTML = probeValueHtml(firmware);
+      document.getElementById('probeCardBattery').innerHTML = probeValueHtml(battery);
+
+      const services = data.services || [];
+      const charCount = services.reduce((n, s) => n + (s.characteristics || []).length, 0);
+      document.getElementById('probeCardCounts').innerText = `${services.length} / ${charCount}`;
+
+      const tree = document.getElementById('probeCardTree');
+      tree.innerHTML = services.map(s => {
+        const chars = (s.characteristics || []).map(c => {
+          // value === null: characteristic was listed but never read (outside the safe list)
+          const valueHtml = c.value === null || c.value === undefined
+            ? '<span class="text-slate-600">not read</span>'
+            : probeValueHtml(c.value);
+          return `
+            <div class="p-1 pl-1.5 rounded bg-cyber-panel2/50 border-l-2 border-cyber-cyan/40">
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-bold text-slate-200 text-[9px] truncate">${esc(c.name || c.uuid)}</span>
+                <span class="text-[8px] text-slate-500 shrink-0">${esc((c.properties || []).join(', '))}</span>
+              </div>
+              <div class="text-[8px] text-slate-500 truncate">${esc(c.uuid)}</div>
+              <div class="text-[9px] break-words">${valueHtml}</div>
+            </div>`;
+        }).join('');
+        return `
+          <div class="p-1.5 rounded bg-cyber-black/70 border border-cyber-border/70 space-y-1">
+            <div class="text-[9px] text-cyber-cyan font-bold truncate">${esc(s.name || 'Service')} <span class="text-slate-500 font-normal">${esc(s.uuid)}</span></div>
+            <div class="space-y-1 pl-1">${chars || '<div class="text-slate-600">no characteristics</div>'}</div>
+          </div>`;
+      }).join('') || '<div class="text-slate-600">No services discovered.</div>';
+
+      document.getElementById('selfProbeCard').classList.remove('hidden');
+    }
+
+    function handleProbeResult(msg) {
+      state.probePending = null;
+      if (msg.status === 'success' && msg.data) {
+        state.probeResults[(msg.address || '').toLowerCase()] = { data: msg.data, time: new Date().toLocaleTimeString() };
+        setProbeStatus(null);
+        const select = document.getElementById('selfProbeSelect');
+        if (isTrusted(msg.address)) select.value = msg.address;
+      } else if (msg.status === 'refused') {
+        setProbeStatus('refused', `REFUSED — ${msg.reason || 'Address not in trusted_devices.json'}`);
+      } else {
+        setProbeStatus('error', `Read failed: ${msg.error || 'unknown error'}. The device may be out of range or not accepting connections.`);
+      }
+      updateSelfProbeControls();
+    }
+
+    document.getElementById('trustDeviceBtn').onclick = () => {
+      const ent = state.selectedFp ? state.entities.get(state.selectedFp) : null;
+      if (!ent || !ent.current_address) return;
+      if (isTrusted(ent.current_address)) {
+        wsSend({ action: 'untrust_device', address: ent.current_address });
+      } else {
+        const label = state.aliases[ent.fp] || ent.name || `${ent.vendor || 'Device'} ${ent.fp}`;
+        wsSend({ action: 'trust_device', address: ent.current_address, label: label });
+      }
+    };
+
+    document.getElementById('selfProbeSelect').onchange = () => {
+      setProbeStatus(null);
+      updateSelfProbeControls();
+    };
+
+    document.getElementById('selfProbeRemoveBtn').onclick = () => {
+      const address = document.getElementById('selfProbeSelect').value;
+      if (isTrusted(address)) wsSend({ action: 'untrust_device', address: address });
+    };
+
+    document.getElementById('selfProbeBtn').onclick = () => {
+      const address = document.getElementById('selfProbeSelect').value;
+      if (!isTrusted(address) || state.probePending) return;
+      if (wsSend({ action: 'gatt_probe', address: address })) {
+        state.probePending = address;
+        setProbeStatus('info', `Connecting to ${address}…`);
+        updateSelfProbeControls();
+      }
+    };
+
+    // Save Target Alias
+    document.getElementById('saveAliasBtn').onclick = () => {
+      if (!state.selectedFp) return;
+      const alias = document.getElementById('targetAliasInput').value.trim();
+      if (alias) {
+        state.aliases[state.selectedFp] = alias;
+      } else {
+        delete state.aliases[state.selectedFp];
+      }
+      localStorage.setItem('ghostwall_aliases', JSON.stringify(state.aliases));
+      // Notify backend if needed
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({
+          action: 'set_alias',
+          fp: state.selectedFp,
+          alias: alias
+        }));
+      }
+      renderEventFeed();
+      if (state.tab === 'directory') renderDirectory();
+    };
+
+    // Toggle Watch Target
+    document.getElementById('watchTargetBtn').onclick = () => {
+      if (!state.selectedFp) return;
+      const fp = state.selectedFp;
+      if (state.watchedTargets.has(fp)) {
+        state.watchedTargets.delete(fp);
+      } else {
+        state.watchedTargets.add(fp);
+      }
+      localStorage.setItem('ghostwall_watched', JSON.stringify(Array.from(state.watchedTargets)));
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({
+          action: 'watch_target',
+          fp: fp,
+          watched: state.watchedTargets.has(fp)
+        }));
+      }
+      if (state.entities.has(fp)) {
+        updateInspector(state.entities.get(fp));
+      }
+    };
+
+    // Toggle Historical MAC list
+    document.getElementById('toggleMacHistoryBtn').onclick = () => {
+      const list = document.getElementById('macHistoryList');
+      list.classList.toggle('hidden');
+    };
+
+    // Tab Switching
+    document.getElementById('tabInspectorBtn').onclick = () => showTab('inspector');
+    document.getElementById('tabDirectoryBtn').onclick = () => showTab('directory');
+
+    function showTab(tabName) {
+      state.tab = tabName;
+      const btnInsp = document.getElementById('tabInspectorBtn');
+      const btnDir = document.getElementById('tabDirectoryBtn');
+      const tabInsp = document.getElementById('inspectorTab');
+      const tabDir = document.getElementById('directoryTab');
+
+      if (tabName === 'inspector') {
+        btnInsp.className = 'flex-1 text-center py-1.5 text-xs font-semibold text-cyber-emerald border-b-2 border-cyber-emerald transition';
+        btnDir.className = 'flex-1 text-center py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 transition';
+        tabInsp.classList.remove('hidden');
+        tabDir.classList.add('hidden');
+      } else {
+        btnDir.className = 'flex-1 text-center py-1.5 text-xs font-semibold text-cyber-emerald border-b-2 border-cyber-emerald transition';
+        btnInsp.className = 'flex-1 text-center py-1.5 text-xs font-semibold text-slate-400 hover:text-slate-200 transition';
+        tabDir.classList.remove('hidden');
+        tabInsp.classList.add('hidden');
+        renderDirectory();
+      }
+    }
+
+    // Directory Rendering
+    function renderDirectory() {
+      const list = document.getElementById('dirList');
+      const search = (document.getElementById('dirSearchInput').value || '').toLowerCase();
+      list.innerHTML = '';
+
+      const ents = Array.from(state.entities.values());
+      const filtered = ents.filter(e => {
+        const alias = (state.aliases[e.fp] || '').toLowerCase();
+        const name = (e.name || '').toLowerCase();
+        const vendor = (e.vendor || '').toLowerCase();
+        const mac = (e.current_address || '').toLowerCase();
+        const fp = (e.fp || '').toLowerCase();
+        return alias.includes(search) || name.includes(search) || vendor.includes(search) || mac.includes(search) || fp.includes(search);
+      });
+
+      filtered.sort((a, b) => (b.continuity?.screen_unlocked ? 1 : 0) - (a.continuity?.screen_unlocked ? 1 : 0) || b.rssi - a.rssi);
+
+      filtered.forEach(e => {
+        const item = document.createElement('div');
+        const isSelected = e.fp === state.selectedFp;
+        const alias = state.aliases[e.fp];
+        const title = alias || e.name || `${e.vendor} ${e.fp}`;
+
+        let statusDot = 'bg-slate-500';
+        if (e.continuity?.screen_unlocked) statusDot = 'bg-cyber-crimson animate-ping';
+        else if (e.continuity?.handoff_active) statusDot = 'bg-cyber-purple';
+        else if (e.continuity?.airpods_open) statusDot = 'bg-cyber-emerald';
+        else if (e.tracker) statusDot = 'bg-cyber-amber';
+
+        item.className = `p-2 rounded bg-cyber-black border ${isSelected ? 'border-cyber-emerald glow-emerald' : 'border-cyber-border hover:border-slate-500'} cursor-pointer transition flex items-center justify-between text-xs`;
+        const itemTitle = e.hardware_model ? `${e.hardware_model} [${e.fp}]` : title;
+        item.innerHTML = `
+          <div class="flex items-center space-x-2 truncate">
+            <span class="w-2 h-2 rounded-full ${statusDot}"></span>
+            <div class="truncate">
+              <div class="font-bold text-slate-200 truncate">${itemTitle}</div>
+              <div class="text-[10px] text-slate-500 font-mono">${e.ambiguous ? '⚠ multiple devices • ' : ''}${e.fp} • ${e.mac_count} ${e.mac_count > 1 ? 'addrs' : 'addr'}</div>
+            </div>
+          </div>
+          <div class="text-right flex-none pl-2">
+            <div class="font-bold text-cyber-emerald">${e.rssi} dBm</div>
+            <div class="text-[9px] text-slate-500">${Math.round(e.angle)}°</div>
+          </div>
+        `;
+        item.onclick = () => selectTarget(e.fp);
+        list.appendChild(item);
+      });
+    }
+
+    document.getElementById('dirSearchInput').oninput = renderDirectory;
+
+    function copyHex() {
+      const hex = document.getElementById('inspRawHex').innerText;
+      navigator.clipboard.writeText(hex);
+    }
+
+    // ------------------------------------------------------------------------
+    // Voice Alerts Toggle & Audio Test
+    // ------------------------------------------------------------------------
+    function updateVoiceButton() {
+      if (state.voiceAlerts) {
+        toggleVoiceBtn.className = 'flex items-center space-x-2 px-3 py-1.5 rounded border border-cyber-emerald/40 bg-cyber-emerald/10 hover:bg-cyber-emerald/20 text-cyber-emerald text-xs tracking-wider transition';
+        voiceStatusText.innerText = 'VOICE: ON';
+      } else {
+        toggleVoiceBtn.className = 'flex items-center space-x-2 px-3 py-1.5 rounded border border-slate-700 bg-slate-900 text-slate-400 text-xs tracking-wider transition';
+        voiceStatusText.innerText = 'VOICE: OFF';
+      }
+    }
+
+    toggleVoiceBtn.onclick = () => {
+      state.voiceAlerts = !state.voiceAlerts;
+      updateVoiceButton();
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({
+          action: 'toggle_voice_alerts',
+          enabled: state.voiceAlerts
+        }));
+      }
+    };
+
+    document.getElementById('testAudioBtn').onclick = () => {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({
+          action: 'test_voice_alert',
+          text: 'Tactical BLE Sonar fully operational'
+        }));
+      }
+    };
+
+    function simulateEvent(type) {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({
+          action: 'simulate_event',
+          type: type
+        }));
+      }
+    }
+
+    // Feed Controls
+    document.getElementById('clearFeedBtn').onclick = () => {
+      state.events = [];
+      renderEventFeed();
+    };
+
+    document.getElementById('autoScrollBtn').onclick = () => {
+      state.autoScroll = !state.autoScroll;
+      const btn = document.getElementById('autoScrollBtn');
+      btn.className = state.autoScroll ? 'p-1 rounded text-cyber-emerald hover:bg-cyber-panel transition' : 'p-1 rounded text-slate-500 hover:bg-cyber-panel transition';
+    };
+
+    // ------------------------------------------------------------------------
+    // TACTICAL RADAR CANVAS RENDERING ENGINE (60 FPS)
+    // ------------------------------------------------------------------------
+    let sweepAngle = 0;
+    const sweepSpeed = 0.025; // radians per frame
+
+    function resizeCanvas() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvasContainer.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.resetTransform();
+      ctx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Map RSSI (-35 to -100 dBm) to radial distance from center
+    function rssiToRadius(rssi, maxR) {
+      const minR = maxR * 0.08; // immediate host vicinity
+      if (rssi >= -55) {
+        // Immediate / Desk: -35 to -55 dBm -> minR to 0.25 * maxR
+        const t = (rssi - (-35)) / (-55 - (-35));
+        return minR + t * (maxR * 0.25 - minR);
+      } else if (rssi >= -70) {
+        // Same Room: -55 to -70 dBm -> 0.25 * maxR to 0.50 * maxR
+        const t = (rssi - (-55)) / (-70 - (-55));
+        return maxR * 0.25 + t * (maxR * 0.25);
+      } else if (rssi >= -85) {
+        // Adjacent Room: -70 to -85 dBm -> 0.50 * maxR to 0.75 * maxR
+        const t = (rssi - (-70)) / (-85 - (-70));
+        return maxR * 0.50 + t * (maxR * 0.25);
+      } else {
+        // Far / Perimeter: -85 to -100 dBm -> 0.75 * maxR to 0.98 * maxR
+        const t = Math.min(1.0, (rssi - (-85)) / (-100 - (-85)));
+        return maxR * 0.75 + t * (maxR * 0.23);
+      }
+    }
+
+    function renderRadar(timestamp) {
+      const rect = canvasContainer.getBoundingClientRect();
+      const width = rect.width;
+      const height = rect.height;
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const maxR = Math.min(width, height) / 2 - 35;
+
+      ctx.clearRect(0, 0, width, height);
+
+      if (maxR <= 10) {
+        requestAnimationFrame(renderRadar);
+        return;
+      }
+
+      // 1. Draw Radar Background Grid & Concentric Distance Rings
+      const rings = [
+        { r: maxR * 0.25, label: '-55 dBm (Desk)', color: '#00ff9d22', textColor: '#00ff9d88' },
+        { r: maxR * 0.50, label: '-70 dBm (Room)', color: '#00f0ff22', textColor: '#00f0ff88' },
+        { r: maxR * 0.75, label: '-85 dBm (Hall)', color: '#ffffff15', textColor: '#94a3b866' },
+        { r: maxR * 1.00, label: '-100 dBm (Far)', color: '#ffffff10', textColor: '#64748b66' }
+      ];
+
+      // Outer compass ring
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, maxR + 12, 0, Math.PI * 2);
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Degree tick marks on outer compass
+      for (let deg = 0; deg < 360; deg += 10) {
+        const rad = (deg * Math.PI) / 180;
+        const tickLen = deg % 30 === 0 ? 8 : 4;
+        const x1 = centerX + (maxR + 12) * Math.cos(rad);
+        const y1 = centerY + (maxR + 12) * Math.sin(rad);
+        const x2 = centerX + (maxR + 12 - tickLen) * Math.cos(rad);
+        const y2 = centerY + (maxR + 12 - tickLen) * Math.sin(rad);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = deg % 90 === 0 ? '#00ff9d' : '#334155';
+        ctx.lineWidth = deg % 90 === 0 ? 1.5 : 1;
+        ctx.stroke();
+
+        // Degree labels every 90 deg
+        if (deg % 90 === 0) {
+          const labelRad = (deg * Math.PI) / 180;
+          const lx = centerX + (maxR + 24) * Math.cos(labelRad);
+          const ly = centerY + (maxR + 24) * Math.sin(labelRad);
+          ctx.fillStyle = '#00ff9d';
+          ctx.font = '9px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          let cardinal = 'N';
+          if (deg === 90) cardinal = 'E';
+          else if (deg === 180) cardinal = 'S';
+          else if (deg === 270) cardinal = 'W';
+          ctx.fillText(`${cardinal} ${deg}°`, lx, ly);
+        }
+      }
+
+      // Draw 4 Concentric Rings
+      rings.forEach(ring => {
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, ring.r, 0, Math.PI * 2);
+        ctx.strokeStyle = ring.color;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Ring distance label
+        ctx.fillStyle = ring.textColor;
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(ring.label, centerX + 6, centerY - ring.r + 12);
+      });
+
+      // Crosshairs
+      ctx.beginPath();
+      ctx.moveTo(centerX - maxR, centerY);
+      ctx.lineTo(centerX + maxR, centerY);
+      ctx.moveTo(centerX, centerY - maxR);
+      ctx.lineTo(centerX, centerY + maxR);
+      ctx.strokeStyle = '#00ff9d10';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // 2. Center Host (MacBook Air) Reticle
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#00ff9d';
+      ctx.shadowColor = '#00ff9d';
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Pulsing host ring
+      const hostPulse = (Math.sin(timestamp / 300) + 1) * 4 + 10;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, hostPulse, 0, Math.PI * 2);
+      ctx.strokeStyle = '#00ff9d44';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.fillStyle = '#00ff9d';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('HOST [YOU]', centerX, centerY + 22);
+
+      // 3. Rotating Phosphor Sweep Line and Gradient Trail
+      sweepAngle = (sweepAngle + sweepSpeed) % (Math.PI * 2);
+
+      // Trailing phosphor fan gradient (~40 degrees)
+      const trailAngle = 0.65; // ~37 degrees
+      const startAngle = sweepAngle - trailAngle;
+      
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.arc(centerX, centerY, maxR, startAngle, sweepAngle, false);
+      ctx.closePath();
+      
+      const sweepGrad = ctx.createRadialGradient(centerX, centerY, 10, centerX, centerY, maxR);
+      sweepGrad.addColorStop(0, 'rgba(0, 255, 157, 0.22)');
+      sweepGrad.addColorStop(1, 'rgba(0, 255, 157, 0.0)');
+      ctx.fillStyle = sweepGrad;
+      ctx.fill();
+      ctx.restore();
+
+      // Sharp Sweep Line
+      const sweepX = centerX + maxR * Math.cos(sweepAngle);
+      const sweepY = centerY + maxR * Math.sin(sweepAngle);
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(sweepX, sweepY);
+      ctx.strokeStyle = '#00ff9d';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#00ff9d';
+      ctx.shadowBlur = 12;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // 4. Render Target Nodes with Deterministic Angle + Radial Interpolation
+      const entitiesList = Array.from(state.entities.values());
+
+      entitiesList.forEach(ent => {
+        // Angle in radians (deterministic)
+        const angleRad = (ent.angle * Math.PI) / 180;
+        
+        // Target distance based on smoothed RSSI
+        const targetR = rssiToRadius(ent.rssi_ema, maxR);
+        // LERP radial distance for smooth animation
+        ent.currentR = ent.currentR ? ent.currentR + (targetR - ent.currentR) * 0.12 : targetR;
+
+        const x = centerX + ent.currentR * Math.cos(angleRad);
+        const y = centerY + ent.currentR * Math.sin(angleRad);
+        ent.screenX = x;
+        ent.screenY = y;
+
+        // Check if sweep passed over this target angle -> trigger blip flash
+        const angleDiff = Math.abs(sweepAngle - angleRad);
+        if (angleDiff < 0.05 || Math.abs(angleDiff - Math.PI * 2) < 0.05) {
+          ent.blipTime = timestamp;
+        }
+
+        const isBlip = (timestamp - (ent.blipTime || 0)) < 700;
+        const blipIntensity = isBlip ? Math.max(0, 1 - (timestamp - ent.blipTime) / 700) : 0;
+
+        const isSelected = ent.fp === state.selectedFp;
+        const isHovered = ent.fp === state.hoveredFp;
+        const isWatched = state.watchedTargets.has(ent.fp);
+        const isUnlocked = ent.continuity?.screen_unlocked;
+        const isHandoff = ent.continuity?.handoff_active;
+        const isAirpods = ent.continuity?.airpods_open;
+        const isAirTag = ent.tracker || ent.continuity?.find_my_separated !== undefined;
+
+        // Target Visual States
+        if (isUnlocked || isHandoff) {
+          // --- BRIGHT CRIMSON SHOCKWAVE NODE ---
+          ent.shockwavePhase = (ent.shockwavePhase || 0) + 0.05;
+          const waveRadius = 10 + (Math.sin(ent.shockwavePhase) + 1) * 8;
+          
+          // Shockwave ripple
+          ctx.beginPath();
+          ctx.arc(x, y, waveRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(255, 42, 84, ${0.7 - (waveRadius / 30)})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Glowing Node Dot
+          ctx.beginPath();
+          ctx.arc(x, y, 6.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#ff2a54';
+          ctx.shadowColor = '#ff2a54';
+          ctx.shadowBlur = 18;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          // Floating Badge: [SCREEN UNLOCKED]
+          const badgeText = isUnlocked ? '[SCREEN UNLOCKED]' : '[HANDOFF ACTIVE]';
+          ctx.fillStyle = '#ff2a54';
+          ctx.font = 'bold 9px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(badgeText, x, y - 16);
+
+        } else if (isAirTag) {
+          // --- AMBER DIAMOND SHAPE FOR AIRTAG / FIND MY ---
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(Math.PI / 4);
+          ctx.beginPath();
+          ctx.rect(-5, -5, 10, 10);
+          ctx.fillStyle = '#ffbe0b';
+          ctx.shadowColor = '#ffbe0b';
+          ctx.shadowBlur = 12;
+          ctx.fill();
+          ctx.restore();
+
+          ctx.fillStyle = '#ffbe0b';
+          ctx.font = '8px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('[AIRTAG]', x, y - 12);
+
+        } else if (isAirpods) {
+          // --- AIRPODS OPEN (LIME / EMERALD) ---
+          ctx.beginPath();
+          ctx.arc(x, y, 6, 0, Math.PI * 2);
+          ctx.fillStyle = '#10b981';
+          ctx.shadowColor = '#10b981';
+          ctx.shadowBlur = 12;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          ctx.fillStyle = '#10b981';
+          ctx.font = '8px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('[AIRPODS OPEN]', x, y - 12);
+
+        } else {
+          // --- IDLE / LOCKED DEVICE (CYAN / EMERALD DOT) ---
+          ctx.beginPath();
+          ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#00f0ff';
+          if (blipIntensity > 0) {
+            ctx.shadowColor = '#00ff9d';
+            ctx.shadowBlur = blipIntensity * 15;
+          }
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+
+        // Blip Bloom Overlay when swept
+        if (blipIntensity > 0) {
+          ctx.beginPath();
+          ctx.arc(x, y, 8 + blipIntensity * 8, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(0, 255, 157, ${blipIntensity * 0.8})`;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+
+        // Selection / Hover Targeting Bracket
+        if (isSelected || isHovered) {
+          const boxSize = 14;
+          ctx.strokeStyle = isSelected ? '#ff2a54' : '#00ff9d';
+          ctx.lineWidth = 1.5;
+          // Reticle brackets [  ]
+          ctx.beginPath();
+          // Top-left
+          ctx.moveTo(x - boxSize, y - boxSize + 4);
+          ctx.lineTo(x - boxSize, y - boxSize);
+          ctx.lineTo(x - boxSize + 4, y - boxSize);
+          // Top-right
+          ctx.moveTo(x + boxSize - 4, y - boxSize);
+          ctx.lineTo(x + boxSize, y - boxSize);
+          ctx.lineTo(x + boxSize, y - boxSize + 4);
+          // Bottom-left
+          ctx.moveTo(x - boxSize, y + boxSize - 4);
+          ctx.lineTo(x - boxSize, y + boxSize);
+          ctx.lineTo(x - boxSize + 4, y + boxSize);
+          // Bottom-right
+          ctx.moveTo(x + boxSize - 4, y + boxSize);
+          ctx.lineTo(x + boxSize, y + boxSize);
+          ctx.lineTo(x + boxSize, y + boxSize - 4);
+          ctx.stroke();
+        }
+
+        // Watched Reticle
+        if (isWatched) {
+          ctx.beginPath();
+          ctx.arc(x, y, 16, 0, Math.PI * 2);
+          ctx.strokeStyle = '#ffbe0b88';
+          ctx.setLineDash([2, 2]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Target Label (hardware model if read via self-probe, else Alias, Name, or Vendor + FP)
+        const alias = state.aliases[ent.fp];
+        let displayName = alias || ent.name || `${ent.vendor} ${ent.fp}`;
+        if (ent.ambiguous) {
+          // Conflicting models were read under this ID: never label it as one device
+          displayName = `⚠ MULTIPLE DEVICES [${ent.fp}]`;
+        } else if (ent.hardware_model) {
+          displayName = `${ent.hardware_model} [${ent.fp}]`;
+        }
+        const maskTag = ent.mac_count > 1 ? ` [${ent.mac_count} addrs]` : '';
+        const labelText = `${displayName} (${ent.rssi} dBm)${maskTag}`;
+
+        ctx.fillStyle = isSelected ? '#ffffff' : (isUnlocked ? '#ff2a54' : '#94a3b8');
+        ctx.font = isSelected ? 'bold 10px monospace' : '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(labelText, x, y + 14);
+      });
+
+      requestAnimationFrame(renderRadar);
+    }
+
+    requestAnimationFrame(renderRadar);
+
+    // ------------------------------------------------------------------------
+    // Canvas Mouse Click & Hover Interaction
+    // ------------------------------------------------------------------------
+    function getEntityUnderMouse(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = evt.clientX - rect.left;
+      const mouseY = evt.clientY - rect.top;
+
+      for (const ent of state.entities.values()) {
+        if (ent.screenX !== undefined && ent.screenY !== undefined) {
+          const dx = mouseX - ent.screenX;
+          const dy = mouseY - ent.screenY;
+          if (Math.sqrt(dx * dx + dy * dy) < 20) {
+            return ent;
+          }
+        }
+      }
+      return null;
+    }
+
+    canvas.addEventListener('mousemove', (evt) => {
+      const ent = getEntityUnderMouse(evt);
+      state.hoveredFp = ent ? ent.fp : null;
+      canvas.style.cursor = ent ? 'pointer' : 'crosshair';
+    });
+
+    canvas.addEventListener('click', (evt) => {
+      const ent = getEntityUnderMouse(evt);
+      if (ent) {
+        selectTarget(ent.fp);
+      }
+    });
+
+    // Start WebSocket on Load
+    initWebSocket();
+  </script>
+</body>
+</html>

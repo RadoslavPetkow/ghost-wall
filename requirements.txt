@@ -1,0 +1,6 @@
+bleak>=0.22
+rich>=13
+websockets>=12.0
+aiohttp>=3.9
+pyobjc-framework-CoreWLAN; sys_platform == "darwin"
+pyobjc-framework-CoreLocation; sys_platform == "darwin"
